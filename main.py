@@ -1,11 +1,14 @@
 import asyncio
 import getopt
 import os
+import pathlib
 import sys
+from typing import Dict, Any
+
 import utils
 import openai
 from dotenv import load_dotenv
-from google.cloud import translate_v3 as translate
+from google.cloud import translate_v2 as translate
 
 import extract_sjis
 
@@ -31,14 +34,24 @@ async def main(argv):
     print(f'Complete! Extracted shift-jis to {dict_file_path}.')
     print()
 
-    print('Converting extracted data into dictionary and dropping any invalid sjis strings...')
+    print('Converting extracted data into dictionary and dropping anything we don\'t want to translate...')
     japanese_texts: dict[str, str] = create_japanese_text_dict(dict_file_path)
     print('Complete!')
     print()
 
     print('Translating japanese text via Google ...')
-    translate_text_google(japanese_texts, 'popntranslator', inputfilepath)
+    translated_text = translate_text_google(japanese_texts, 'popntranslator', inputfilepath)
+    print('Complete!')
+    print()
 
+    print('Use GPT to paraphrase strings that are too long...')
+    shortened_text = shorten_text_gpt(translated_text)
+    print('Complete!')
+
+    print('Writing final dict file...')
+    dictpath = inputfilepath.replace('.dll', '.dict')
+    creat_dict_file(shortened_text, dictpath)
+    print('Complete!')
     quit()
 
 
@@ -79,6 +92,7 @@ def create_japanese_text_dict(dict_file_path):
     print(f'Found {len(all_fields)} fields in {dict_file_path}')
     print()
 
+    # Create a dict of translation targets.
     parsing_errors = 0
     duplicates = 0
     non_translatable_strings = 0
@@ -108,65 +122,90 @@ def create_japanese_text_dict(dict_file_path):
     print(f'Found {duplicates} duplicate strings.')
     print(f'File contains {japanese_texts.__len__()} unique, valid sjis strings that we actually want to translate.')
 
+    # Dump the dict to a file.
+    # Don't really need this, just handy for review/debug
     with open(f'{dict_file_path}_deduped.txt', 'w', encoding='utf-8') as deduped_file:
         for japanese_text in japanese_texts:
-            deduped_file.write(japanese_text)
-            deduped_file.write('\n')
+            deduped_file.write(f'{japanese_text}\n')
 
     return japanese_texts
 
 
-def translate_text_google(texts, project_id, inputfilepath) -> translate.TranslationServiceClient:
+def translate_text_google(texts, project_id, inputfilepath) -> dict[str, str]:
     """Translating Text."""
-    client = translate.TranslationServiceClient()
-    location = "global"
-    parent = f"projects/{project_id}/locations/{location}"
+    client = translate.Client()
 
-    with open(f'{inputfilepath}_translated.txt', 'w', encoding='utf-8') as translated_file:
+    translated_dict = {}
+
+    with (open(f'{inputfilepath}_translated.txt', 'w', encoding='utf-8') as translated_file):
         for text in texts:
-            response = client.translate_text(text, 'en', parent, '', 'ja')
+            if len(translated_dict) > 100:
+                return translated_dict  # Save money when debugging
 
-            translated_text = ''
-            for translation in response.translations:
-                translated_text += translation.translated_text
+            response = client.translate(text, target_language='en', source_language='ja')
 
-            print(f'Orig: {text}')
-            print(f'Tran: {translated_text}')
+            translated_dict[text] = response['translatedText']
+
+            print(f'Orig: {response['input']}')
+            print(f'Tran: {response['translatedText']}')
             print()
 
-            translated_file.write(f'Orig: "{text}" Trans: "{translated_text}"\n')
+            translated_file.write(f'Orig: "{text}" Trans: "{response['translatedText']}"\n')
+
+    return translated_dict
 
 
-def translate_text_gpt(texts: dict[str, str]) -> None:
+def shorten_text_gpt(translated_texts: dict[str, str]) -> dict[str, str]:
+    """
+    Shorten a string to make it the same size as the original string.
+    :param translated_texts: Dictionary[japaneseText, translatedText]
+    :return: Same dictionary with shortened translated texts
+    """
     client = openai.OpenAI(
         # This is the default and can be omitted
         api_key=os.environ.get("OPENAI_API_KEY"),
     )
 
-    for text in texts:
-        if text.__len__() < 40:
+    for key in translated_texts:
+        # If the translated text is longer than the original, ask gpt to shorten the string.
+        if len(translated_texts[key]) <= len(key):
+            print(f'String "{translated_texts[key]}" is ok as-is.')
             continue
 
-        print(f'Translating {text}...')
         response = client.chat.completions.create(
             messages=[
                 {
                     "role": "system",
-                    "content": "You are a translator for Japanese text to English. You only return translated text. If "
-                               "you cannot translate a piece of text, you return the original text."
+                    "content": "Your job is to shorten strings. You only return shortened strings. If you can not "
+                               "shorten the string, you only return the original string. You never make additional "
+                               "comments."
                 },
                 {
                     "role": "user",
-                    "content": f"Translate '{text}' to English. Do not return more characters than there are in the "
-                               f"source text. Only return the translated text. Your translations will never be longer"
-                               f" than the original text.",
+                    "content": f"Shorten the string '{translated_texts[key]}' to  {len(key)} characters.",
                 }
             ],
             model="gpt-3.5-turbo",
         )
 
-        translation = response.choices[0].message.content.replace('\'', '')
-        print(f'Translation: {translation}')
+        shortened_string = response.choices[0].message.content.replace('\'', '')
+        print(f'Original:  {translated_texts[key]}')
+        print(f'Shortened: {shortened_string}')
+
+        translated_texts[key] = shortened_string
+
+    return translated_texts
+
+
+def creat_dict_file(dictionary, file_path):
+    with (open(f'{file_path}', 'w', encoding='sjis') as dict_file):
+        for text in dictionary:
+            try:
+                dict_file.write(f';{text};{dictionary[text]}\n')
+            except Exception as e:
+                print(f'Encoding error: {e}')
+        dict_file.write(';')
+        dict_file.close()
 
 
 if __name__ == "__main__":
