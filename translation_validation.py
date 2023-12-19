@@ -1,3 +1,6 @@
+debug = False
+
+
 def char_is_japanese(c) -> bool:
     """
     Determine if a character is katakana or hiragana
@@ -6,8 +9,16 @@ def char_is_japanese(c) -> bool:
     """
     is_hiragana = u'\u3040' <= c <= u'\u309F'
     is_katakana = u'\u30A0' <= c <= u'\u30FF'
+    is_chinese = u'\u4E00' <= c <= u'\u9FFF'
+    is_otherjap = u'\uFF00' <= c <= u'\uFFEF'
+    is_cjk = u'\u3000' <= c <= u'\u303F'
 
-    return is_hiragana or is_katakana
+    translatable = is_hiragana or is_katakana or is_chinese or is_otherjap or is_cjk
+
+    if debug:
+        print(f'{c} is {c.encode('unicode-escape')} Translatable: {translatable}')
+
+    return translatable
 
 
 def string_is_japanese(s: str) -> bool:
@@ -31,9 +42,17 @@ def string_is_translation_target(s: str) -> bool:
     :return: Should we translate it?
     """
     if len(s) < 8:
+        if debug:
+            print(f'{s} is too short')
         return False
 
     if s.__contains__('ﾌﾌﾌ'):
+        if debug:
+            print(f'{s} has too many ﾌﾌﾌ')
         return False
 
-    return all(char_is_translatable(s) for c in s)
+    translatable = all(char_is_translatable(c) for c in s)
+
+    if debug and not translatable:
+        print(f'"{s}" is not translatable')
+    return translatable
