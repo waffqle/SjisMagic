@@ -5,7 +5,7 @@ import string_analysis
 import utils
 from utils import write_file_sjis
 
-debug = True
+debug = False
 
 
 def cleanup_file(input_file_path, dict_file_path, output_file_path):
@@ -25,10 +25,10 @@ def cleanup_file(input_file_path, dict_file_path, output_file_path):
     """
     # Minimum percentage of Japanese(ish) characters.
     # Running strings that are 90% english through the translator tends to do more harm than good.
-    min_japaneseness = 40
+    min_japaneseness = 60
 
     # Minimum length. It's hard to do anything useful with 2 character katakana strings and such.
-    min_length = 3
+    min_length = 8
 
     # Codec - You probably shouldn't change this, but here it is.
     text_codec = 'sjis'
@@ -51,6 +51,7 @@ def cleanup_file(input_file_path, dict_file_path, output_file_path):
             print(f'Processing field {i} of {len(all_fields)}')
             # Decode the bytes
             sjis_text = field.decode(text_codec)
+            print(f'{sjis_text = }')
 
             # Is string too short?
             if len(sjis_text) < min_length:
@@ -84,12 +85,12 @@ def cleanup_file(input_file_path, dict_file_path, output_file_path):
         except UnicodeDecodeError as e:
             if debug:
                 print(f'Decoding error: {e}')
-                print(f' Field: {field}')
+                print(f" {text_codec = }: {field = }")
             errors['decoding_error'] += 1
-            quit()
         except Exception as e:
             errors['unknown_error'] += 1
             print(f'Unexpected parsing issue: {e.__class__.__name__}: {e}')
+            print(f" {text_codec = }: {field = }")
 
     for error in errors:
         print(f'Error: {error} Count: {errors[error]}')

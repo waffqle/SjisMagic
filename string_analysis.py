@@ -84,12 +84,16 @@ def calc_japaneseness(s: str):
     translatability = hiragana_perc + katakana_perc + chinese_perc
 
     if debug:
-        print(f'Hiragana: {hiragana_perc:.0f}%')
-        print(f'Katakana: {katakana_perc:.0f}%')
-        print(f'Otherjap: {other_perc:.0f}%')
-        print(f'Chinese:  {chinese_perc:.0f}%')
-        print(f'CJK:      {cjk_perc:.0f}%')
-        print()
-        print(f'Translatability: {translatability:0f}%')
+        if hiragana_perc > 0:
+            print(f'Hiragana: {hiragana_perc:.0f}%')
+        if katakana_perc > 0:
+            print(f'Katakana: {katakana_perc:.0f}%')
+        if other_perc > 0:
+            print(f'Otherjap: {other_perc:.0f}%')
+        if chinese_perc > 0:
+            print(f'Chinese:  {chinese_perc:.0f}%')
+        if cjk_perc > 0:
+            print(f'CJK:      {cjk_perc:.0f}%')
+        print(f'Translatability: {translatability:.0f}%')
 
     return translatability

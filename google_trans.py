@@ -27,9 +27,9 @@ def translate_text_google(input_file_path, output_file_path, dict_file_path):
     # Write dict file
     output_lines = []
     for key in translated_dict:
-        output_lines.append(f';{key};{translated_dict[key]}')
+        output_lines.append(f';{key};{translated_dict[key]}'.encode('sjis'))
 
-    utils.write_file_sjis(dict_file_path, output_lines)
+    utils.write_popnhax_dict(dict_file_path, output_lines)
 
     # Write a debug file
     with (open(output_file_path, 'w', encoding='sjis') as translated_file):

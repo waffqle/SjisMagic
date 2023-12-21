@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import extract_sjis
 import file_cleanup
 import google_trans
+import openai_stuff
 
 # Set this to a value and we'll only process that many rows. (Makes debugging faster/cheaper.)
 only_process_first_rows = 0
@@ -40,15 +41,14 @@ async def main(argv):
     file_cleanup.cleanup_file(input_file_path, extract_file_path, cleanup_file_path)
     print('Complete!\n\n')
 
-    quit()
-
     print('Translating japanese text via Google ...')
     trans_file_path = f'{input_file_path}_translated.txt'
     dict_file_path = f'{input_file_path}_dict.txt'
     if os.path.isfile(trans_file_path) and os.path.isfile(dict_file_path):
         print(f'Dictionary file already exists. Skipping creation. File: {trans_file_path}')
     else:
-        google_trans.translate_text_google(cleanup_file_path, trans_file_path, dict_file_path)
+        openai_stuff.translate_file(cleanup_file_path, trans_file_path, dict_file_path)
+        #google_trans.translate_text_google(cleanup_file_path, trans_file_path, dict_file_path)
     print('Complete!')
 
 
