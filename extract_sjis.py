@@ -3,12 +3,8 @@ Thanks to CrazyRedMachine for this little gem.
 I owe this fella way too many beers at this point.
 -FuckwilderTuesday
 """
-from itertools import count
 
-import main
-import translation_validation
 import utils
-from utils import write_file_sjis
 
 
 def extract_strings(input_file_path: str, output_file_path: str):
@@ -58,7 +54,7 @@ def extract_strings(input_file_path: str, output_file_path: str):
                             # Add word to list
                             extracted_strings.append(word)
                             count += 1
-                        except UnicodeDecodeError as e:
+                        except UnicodeDecodeError:
                             decoding_errors += 1
 
                     # Reset for next word
@@ -79,57 +75,6 @@ def extract_strings(input_file_path: str, output_file_path: str):
     print(f"Found {count} sjis strings. Had {decoding_errors} decoding errors.")
 
 
-def cleanup_file(dict_file_path, output_file_path):
-    """
-    Read the file created by the extract_sjis module. Any invalid sjis strings will be
-    dropped. Also, dropping misc other things that we don't want to translate.
-
-    :param dict_file_path: Path to input dict file
-    :param output_file_path: Path to dump output dictionary
-    """
-    # Read the whole input file.
-    with open(dict_file_path, 'rb') as dict_file:
-        file_contents = dict_file.read()
-
-    # Split it on semicolons - Remember, some strings are multi-line
-    all_fields = file_contents.split(b';;;\x0A')
-
-    print(f'Found {len(all_fields)} fields in {dict_file_path}\n')
-
-    # Collect our translation targets
-    translation_targets = []
-    parsing_errors = 0
-    non_translatable_strings = 0
-    for field in all_fields:
-        try:
-            # Decode the bytes
-            sjis_text = field.decode('sjis')
-
-            # Is it something we want to translate?
-            if translation_validation.string_is_translation_target(sjis_text):
-                translation_targets.append(sjis_text.encode('sjis'))
-                continue
-            else:
-                non_translatable_strings += 1
-        except UnicodeDecodeError as e:
-            # print(f'Parsing error. We expect a few of these. Error: {e}')
-            parsing_errors += 1
-        except Exception as e:
-            print(f'Unexpected parsing issue: {e.__class__.__name__}: {e}')
-
-    print(f'Parsing errors: {parsing_errors}.')
-    print(f'Found {non_translatable_strings} undesirable/non-translatable strings.')
-    print(f'File contains {translation_targets.__len__()} translation targets.')
-
-    # If a debug limit is specified, only process that many rows.
-    if 0 < main.only_process_first_rows <= len(translation_targets):
-        print(f'Trimming list to: {main.only_process_first_rows} (Debug limit was specified)')
-        translation_targets = translation_targets[:main.only_process_first_rows]
-
-    # Dump the dict to a file.
-    write_file_sjis(output_file_path, translation_targets)
-
-
 def sjis_valid_double(first, second):
     # print("test ", first,second)
     valid_first = (b"\x81" <= first <= b"\x9F") or (b"\xE0" <= first <= b"\xFC")
@@ -138,7 +83,7 @@ def sjis_valid_double(first, second):
 
 
 def sjis_valid_single(char):
-    ascii = (char == b"\x0A") or (b"\x20" <= char <= b"\x7F")
-    custom = (b"\xA1" <= char <= b"\xDF")
+    is_ascii = (char == b"\x0A") or (b"\x20" <= char <= b"\x7F")
+    is_custom = (b"\xA1" <= char <= b"\xDF")
     # return ascii
-    return ascii or custom
+    return is_ascii or is_custom
