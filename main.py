@@ -5,8 +5,12 @@ import sys
 from dotenv import load_dotenv
 import extract_sjis
 import file_cleanup
-import google_trans
+import logging
 import openai_stuff
+
+# Let's setup some logging!
+main_log = logging.getLogger('main')
+main_log.setLevel(logging.INFO)
 
 # Set this to a value and we'll only process that many rows. (Makes debugging faster/cheaper.)
 only_process_first_rows = 0
@@ -24,32 +28,35 @@ async def main(argv):
     :param argv: -i Path to input file, -o Path for output file. (opt)
     """
 
+    # Let's get things setup
+    setup_logging()
     load_dotenv()
-
+    text_codec = os.getenv("TEXT_CODEC")
     input_file_path, output_file_path = parse_args(argv)
 
-    print('Beginning sjis extraction...')
-    extract_file_path = f"{input_file_path}_sjis_dump.txt"
-    if os.path.isfile(extract_file_path):
-        print(f'Extract file already exists. Skipping extraction. File: {extract_file_path}')
-    else:
-        extract_sjis.extract_strings(input_file_path, extract_file_path)
-    print(f'Complete! Extracted shift-jis to {extract_file_path}.\n\n')
+    # Ok. Time to get to work.
+    extract_file_path = f"{input_file_path}_dump.txt"
+    main_log.info(f'Input file:  {input_file_path}')
+    main_log.info(f'Output file: {output_file_path}')
+    main_log.info(f'Codec: {text_codec}')
 
-    print('Remove anything we don\'t want to translate...')
-    cleanup_file_path = f'{input_file_path}_sjis_dump_cleaned.txt'
+    extract_sjis.extract_strings(input_file_path, extract_file_path, text_codec)
+    main_log.debug(f'Extracted to: {extract_file_path}')
+
+    cleanup_file_path = f'{input_file_path}_dump_cleaned.txt'
     file_cleanup.cleanup_file(input_file_path, extract_file_path, cleanup_file_path)
-    print('Complete!\n\n')
+    main_log.debug(f"File: {cleanup_file_path}")
 
-    print('Translating japanese text via Google ...')
+    return
+
+    main_log.info('Translating japanese text ...')
     trans_file_path = f'{input_file_path}_translated.txt'
-    dict_file_path = f'{input_file_path}_dict.txt'
+    dict_file_path = f'{input_file_path.replace('.dll', '.dict')}'
     if os.path.isfile(trans_file_path) and os.path.isfile(dict_file_path):
-        print(f'Dictionary file already exists. Skipping creation. File: {trans_file_path}')
+        main_log.info(f'Dictionary file already exists. Skipping creation. File: {trans_file_path}')
     else:
         openai_stuff.translate_file(cleanup_file_path, trans_file_path, dict_file_path)
-        #google_trans.translate_text_google(cleanup_file_path, trans_file_path, dict_file_path)
-    print('Complete!')
+    main_log.info('Complete!')
 
 
 def parse_args(argv):
@@ -66,6 +73,17 @@ def parse_args(argv):
             output_file_path = arg
     output_file_path = output_file_path if output_file_path else input_file_path + "_translated.dict"
     return input_file_path, output_file_path
+
+
+def setup_logging():
+    log_formatter = logging.Formatter(fmt="{levelname:<7}| {message}", style="{")
+    root_logger = logging.getLogger()
+    file_handler = logging.FileHandler("sjismagic.log")
+    file_handler.setFormatter(log_formatter)
+    root_logger.addHandler(file_handler)
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(log_formatter)
+    root_logger.addHandler(console_handler)
 
 
 if __name__ == "__main__":
