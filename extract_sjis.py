@@ -1,5 +1,5 @@
 """
-Thanks to CrazyRedMachine for this little gem.
+Thanks to CrazyRedMachine for the original version of this little gem.
 I owe this fella way too many beers at this point.
 -FuckwilderTuesday
 """
@@ -25,7 +25,7 @@ def extract_strings(input_file_path: str, output_file_path: str, encoding: str):
     found in source file. Semicolon delimited.
     """
     if encoding == 'sjis':
-        codec_regex = b'(?:[\x87-\x9f\xe0-\xef][\x40-\x7e\x80-\xfc ]+|[\x81-\x84][\x40-\x7e\x80-\xfc ]|[\xed-\xee][\x40-\x7e\x80-\xfc ]|[\xfa-\xfc][\x40-\x7e\x80-\xfc ])+'
+        codec_regex = b'[\x81-\x9f\xe0-\xef][\x40-\x7e\x80-\xfc]+'
         extract_strings_with_regex(input_file_path, output_file_path, codec_regex)
     elif encoding == 'shift_jisx0213':
         codec_regex = b'(?:[\x87-\x9f\xe0-\xef][\x40-\x7e\x80-\xfc ]+|[\x81-\x84][\x40-\x7e\x80-\xfc ]|[\xed-\xee][\x40-\x7e\x80-\xfc ]|[\xfa-\xfc][\x40-\x7e\x80-\xfc ])+'
