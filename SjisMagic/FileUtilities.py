@@ -1,3 +1,8 @@
+import logging
+
+logger = logging.getLogger('utils')
+logger.setLevel(logging.INFO)
+
 def check_file_contains_bytes(search_bytes, source_file_path):
     # Make sure it all exits in the source file
     with open(source_file_path, 'rb') as f:
@@ -27,6 +32,7 @@ def write_popnhax_dict(output_file_path, list_of_items):
     outputfile = open(output_file_path, "wb")
     for word in list_of_items:
         outputfile.write(word)
+
         outputfile.write(b'\x0A')
 
     outputfile.write(b';')
