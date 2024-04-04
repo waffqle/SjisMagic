@@ -5,6 +5,7 @@ import sys
 from dotenv import load_dotenv
 from SjisMagic import SjisExtractor, DataCleaner, AnthropicService, DatabaseService
 import logging
+from utils import announce_status
 
 # Let's setup some logging!
 logger = logging.getLogger('main')
@@ -32,7 +33,8 @@ async def main(argv):
     text_codec = os.getenv("TEXT_CODEC")
     input_file_path, output_file_path = parse_args(argv)
 
-    # Ok. Time to get to work.
+    # Ok. Time to get to work
+    announce_status('Starting up')
     logger.info(f"Extracting: {input_file_path}")
     logger.info(f"Creating:   {output_file_path}")
     logger.info(f'Codec: {text_codec}')
@@ -78,6 +80,9 @@ def setup_logging():
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(log_formatter)
     root_logger.addHandler(console_handler)
+
+
+
 
 
 if __name__ == "__main__":

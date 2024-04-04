@@ -9,22 +9,14 @@ logger = logging.getLogger('cleanup')
 logger.setLevel(logging.INFO)
 
 
-@db_session
 def exclude_too_short_strings(min_length: int):
-    logger.info(f"Excluding strings below {min_length} from translation.")
-    too_short_strings = select(translation for translation in db.Translation if
-                               translation.text_length < min_length and translation.exclude_from_translation == 0)
+    announce_status(f"Excluding strings below {min_length} from translation.")
 
-    logger.info(f"Found {too_short_strings.count} short phrases.")
-    return
-
-    ts = 0
-    for too_short_string in too_short_strings:
-        too_short_string.exclude_from_translation = True
-        too_short_string.exclusion_reason = "Too short"
-        ts += 1
-
-    logger.info(f"Excluding {ts} translations below {min_length} chars from translation.")
+    with sqlite_db.atomic():
+        query = Translation.update(exclude_from_translation=True, exclusion_reason='Too Short').where(
+            Translation.text_length < min_length, Translation.exclude_from_translation == False)
+        rows_touched = query.execute()
+    logger.info(f"Excluded {rows_touched:,} short phrases.")
 
 
 def cleanup_file(input_file_path, dict_file_path, output_file_path):

@@ -6,7 +6,9 @@ I owe this fella way too many beers at this point.
 import logging
 import re
 from collections import defaultdict
-from SjisMagic import FileUtilities, DatabaseService
+
+from SjisMagic import DatabaseService
+from utils import announce_status
 
 logger = logging.getLogger('extraction')
 logger.setLevel(logging.INFO)
@@ -23,10 +25,7 @@ def extract_strings(input_file_path: str, encoding: str):
     found in source file. Semicolon delimited.
     """
 
-    logger.info('')
-    logger.info('*****************************')
-    logger.info(f'Beginning string extraction!')
-    logger.info('*****************************')
+    announce_status("Extracting strings")
 
     if encoding == 'sjis':
         codec_regex = b'[\x81-\x9f\xe0-\xef][\x40-\x7e\x80-\xfc]+'
@@ -43,7 +42,7 @@ def extract_strings_with_codec(input_file_path, codec_regex):
     with open(input_file_path, 'rb') as file:
         binary_data = file.read()
 
-    logger.debug(f"Read {len(binary_data)} bytes from {input_file_path}")
+    logger.debug(f"Read {len(binary_data):,} bytes from {input_file_path}")
 
     extracted_strings = set()
     # Regular expression to match Shift JIS X 0213 encoded strings
@@ -54,7 +53,7 @@ def extract_strings_with_codec(input_file_path, codec_regex):
     collected_errors = defaultdict(int)
 
     potentials = pattern.findall(binary_data)
-    logger.info(f'Potential strings: {len(potentials)}')
+    logger.info(f'Potential strings: {len(potentials):,}')
 
     for potential in potentials:
         try:
@@ -66,9 +65,7 @@ def extract_strings_with_codec(input_file_path, codec_regex):
             logger.debug(f"Issue: {e}")
 
     for error in collected_errors.keys():
-        logger.warning(f"{error}: {collected_errors[error]}")
+        logger.warning(f"{error}: {collected_errors[error]:,}")
 
-    logger.info(f"Unique strings: {len(extracted_strings)}")
+    logger.info(f"Unique strings: {len(extracted_strings):,}")
     DatabaseService.upsert_extracted_texts(extracted_strings)
-
-    logger.info(f"Storing {len(extracted_strings)} strings in the DB.")
