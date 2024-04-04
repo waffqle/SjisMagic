@@ -6,13 +6,13 @@ I owe this fella way too many beers at this point.
 import logging
 import re
 from collections import defaultdict
-from SjisMagic import FileUtilities
+from SjisMagic import FileUtilities, DatabaseService
 
 logger = logging.getLogger('extraction')
 logger.setLevel(logging.INFO)
 
 
-def extract_strings(input_file_path: str, output_file_path: str, encoding: str):
+def extract_strings(input_file_path: str, encoding: str):
     """
     Extract shift-jis strings from a file. Due to the nature of the encoding, shift-jis can't be identified with 100%
     precision. Expect to get some false positives.
@@ -20,7 +20,6 @@ def extract_strings(input_file_path: str, output_file_path: str, encoding: str):
 
     :param encoding: sjis or shift_jisx0213
     :param input_file_path: Source file
-    :param output_file_path: Dictionary of strings with address where they were
     found in source file. Semicolon delimited.
     """
 
@@ -31,23 +30,22 @@ def extract_strings(input_file_path: str, output_file_path: str, encoding: str):
 
     if encoding == 'sjis':
         codec_regex = b'[\x81-\x9f\xe0-\xef][\x40-\x7e\x80-\xfc]+'
-        extract_strings_with_codec(input_file_path, output_file_path, codec_regex)
+        extract_strings_with_codec(input_file_path, codec_regex)
     elif encoding == 'shift_jisx0213':
         codec_regex = b'(?:[\x87-\x9f\xe0-\xef][\x40-\x7e\x80-\xfc ]+|[\x81-\x84][\x40-\x7e\x80-\xfc ]|[\xed-\xee][\x40-\x7e\x80-\xfc ]|[\xfa-\xfc][\x40-\x7e\x80-\xfc ])+'
-        extract_strings_with_codec(input_file_path, output_file_path, codec_regex)
+        extract_strings_with_codec(input_file_path, codec_regex)
     else:
         raise Exception('Invalid encoding.')
 
 
-def extract_strings_with_codec(input_file_path, output_file_path,
-                               codec_regex):
+def extract_strings_with_codec(input_file_path, codec_regex):
     logger.info(f"Extracting from: {input_file_path}")
     with open(input_file_path, 'rb') as file:
         binary_data = file.read()
 
     logger.debug(f"Read {len(binary_data)} bytes from {input_file_path}")
 
-    shift_jis_strings = set()
+    extracted_strings = set()
     # Regular expression to match Shift JIS X 0213 encoded strings
     pattern = re.compile(
         codec_regex)
@@ -60,10 +58,8 @@ def extract_strings_with_codec(input_file_path, output_file_path,
 
     for potential in potentials:
         try:
-            # Decode the Shift JIS encoded string
-            decoded_string = potential.decode('shift_jisx0213')
-            encoded_string = decoded_string.encode('shift_jisx0213')
-            shift_jis_strings.add(encoded_string)
+            # False positives will generate UnicodeDecodeError's
+            extracted_strings.add(potential.decode('shift_jisx0213'))
         except Exception as e:
             collected_errors[type(e).__name__] += 1
             logger.debug(f"Bytes: {potential}")
@@ -72,6 +68,7 @@ def extract_strings_with_codec(input_file_path, output_file_path,
     for error in collected_errors.keys():
         logger.warning(f"{error}: {collected_errors[error]}")
 
-    FileUtilities.write_file_sjis(output_file_path, shift_jis_strings)
-    logger.info(f"Good strings: {len(shift_jis_strings)}")
-    logger.info(f'Extacted to: {output_file_path}')
+    logger.info(f"Unique strings: {len(extracted_strings)}")
+    DatabaseService.upsert_extracted_texts(extracted_strings)
+
+    logger.info(f"Storing {len(extracted_strings)} strings in the DB.")

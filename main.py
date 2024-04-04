@@ -3,13 +3,12 @@ import getopt
 import os
 import sys
 from dotenv import load_dotenv
-from SjisMagic import SjisExtractor, FileCleaner, AnthropicService
+from SjisMagic import SjisExtractor, DataCleaner, AnthropicService, DatabaseService
 import logging
-import sqlite3
 
 # Let's setup some logging!
-main_log = logging.getLogger('main')
-main_log.setLevel(logging.INFO)
+logger = logging.getLogger('main')
+logger.setLevel(logging.INFO)
 
 
 async def main(argv):
@@ -27,30 +26,30 @@ async def main(argv):
     # Let's get things setup
     setup_logging()
     load_dotenv()
-    setup_db()
+    DatabaseService.setup_db()
 
     # Fetch our params
     text_codec = os.getenv("TEXT_CODEC")
     input_file_path, output_file_path = parse_args(argv)
 
     # Ok. Time to get to work.
-    extract_file_path = f"{input_file_path}_dump.txt"
-    main_log.info(f'Input file:  {input_file_path}')
-    main_log.info(f'Output file: {output_file_path}')
-    main_log.info(f'Codec: {text_codec}')
+    logger.info(f"Extracting: {input_file_path}")
+    logger.info(f"Creating:   {output_file_path}")
+    logger.info(f'Codec: {text_codec}')
 
-    SjisExtractor.extract_strings(input_file_path, extract_file_path, text_codec)
-    main_log.debug(f'Extracted to: {extract_file_path}')
+    # Extract strings from binary
+    SjisExtractor.extract_strings(input_file_path, text_codec)
 
-    cleanup_file_path = f'{input_file_path}_dump_cleaned.txt'
-    FileCleaner.cleanup_file(input_file_path, extract_file_path, cleanup_file_path)
-    main_log.debug(f"File: {cleanup_file_path}")
+    # Clean out stuff we don't want to translate
+    DataCleaner.exclude_too_short_strings(min_length=4)
 
-    main_log.info('Translating japanese text ...')
+    return
+
+    logger.info('Translating japanese text ...')
     trans_file_path = f'{input_file_path}_translated.txt'
     dict_file_path = f'{input_file_path.replace('.dll', '.dict')}'
     AnthropicService.translate_file(cleanup_file_path, trans_file_path, dict_file_path)
-    main_log.info('Complete!')
+    logger.info('Complete!')
 
 
 def parse_args(argv):
@@ -72,19 +71,13 @@ def parse_args(argv):
 def setup_logging():
     log_formatter = logging.Formatter(fmt="{levelname:<7}| {name} | {message}", style="{")
     root_logger = logging.getLogger()
-    # Logger will fail to write our fancy characters if we don't give it a robust encoding.
+    # Logger won't write our fancy characters if we don't give it a robust encoding.
     file_handler = logging.FileHandler("sjismagic.log", encoding="utf-8", mode="w+")
     file_handler.setFormatter(log_formatter)
     root_logger.addHandler(file_handler)
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(log_formatter)
     root_logger.addHandler(console_handler)
-
-
-def setup_db():
-    if not os.path.exists('database'):
-        os.makedirs('database')
-    conn = sqlite3.connect("database/sjismagic.db")
 
 
 if __name__ == "__main__":

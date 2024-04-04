@@ -2,3 +2,4 @@ asyncio~=3.4.3
 openai~=1.4.0
 python-dotenv~=1.0.0
 anthropic~=0.21.3
+pony~=0.7.17
