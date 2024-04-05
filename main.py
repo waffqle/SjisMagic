@@ -3,7 +3,7 @@ import getopt
 import os
 import sys
 from dotenv import load_dotenv
-from SjisMagic import SjisExtractor, DataCleaner, AnthropicService, DatabaseService
+from SjisMagic import SjisExtractor, DataProcessorService, AnthropicService, DatabaseService
 import logging
 from utils import announce_status
 
@@ -40,14 +40,15 @@ async def main(argv):
     logger.info(f'Codec: {text_codec}')
 
     # Extract strings from binary
-    SjisExtractor.extract_strings(input_file_path, text_codec)
+    # SjisExtractor.extract_strings(input_file_path, text_codec)
 
     # Clean out stuff we don't want to translate
-    DataCleaner.exclude_too_short_strings(min_length=4)
+    #DataProcessorService.exclude_too_short_strings(min_length=4)
 
     logger.info('Translating japanese text ...')
+    DataProcessorService.translate_strings()
+
     dict_file_path = f'{input_file_path.replace('.dll', '.dict')}'
-    DataCleaner.translate_strings()
     logger.info('Complete!')
 
 

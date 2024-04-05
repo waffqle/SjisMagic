@@ -62,13 +62,18 @@ def translate_strings():
     """
     Search the DB for untranslated strings and go to work on em. Commits in batches so work doesn't get lost.
     """
-    # Is there anything to translate?
-    translatables = Translation.select().where(Translation.english_translation == '',
-                                               Translation.exclude_from_translation is False)
-    # Let's go!
-    for translatable in translatables.iterator():
-        translatable.english_translation = translate(translatable.extracted_text, Brain.ChatGPT)
-        logger.info(f"Translated '{translatable.extracted_text}' to '{translatable.english_translation}")
+    with sqlite_db.atomic():
+        # Is there anything to translate?
+        translatables = Translation.select().where(Translation.english_translation == '',
+                                                   Translation.exclude_from_translation == 0)
+
+        logger.info(f"Translatables: {len(translatables)}")
+        # Let's go!
+        for translatable in Translation.select().where(Translation.english_translation == '',
+                                                       Translation.exclude_from_translation == 0).iterator():
+            logger.info(f"Translatable: {translatable}")
+            translatable.english_translation = translate(translatable.extracted_text, Brain.ChatGPT)
+            logger.info(f"Translated '{translatable.extracted_text}' to '{translatable.english_translation}")
 
 
 def translate(text: str, brain) -> str:

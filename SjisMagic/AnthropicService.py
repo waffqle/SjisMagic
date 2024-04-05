@@ -25,8 +25,10 @@ def translate(text: str) -> str:
                "and symbols count towards the length.\n\n\nPlease return the translations as JSON in the following "
                "format:\n{ \n  translations:[\n    original:\"\"\n    translation:\"\"\n  ]\n}",
         messages=[{
-
-        }]
+            "role": "user",
+            "content": f'Translate "{text}". Do not use more than {len(text)} characters.'
+        }
+        ]
     )
 
     logger.debug(f"response: {message}")
