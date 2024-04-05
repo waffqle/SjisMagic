@@ -45,12 +45,9 @@ async def main(argv):
     # Clean out stuff we don't want to translate
     DataCleaner.exclude_too_short_strings(min_length=4)
 
-    return
-
     logger.info('Translating japanese text ...')
-    trans_file_path = f'{input_file_path}_translated.txt'
     dict_file_path = f'{input_file_path.replace('.dll', '.dict')}'
-    AnthropicService.translate_file(cleanup_file_path, trans_file_path, dict_file_path)
+    DataCleaner.translate_strings()
     logger.info('Complete!')
 
 
@@ -80,9 +77,6 @@ def setup_logging():
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(log_formatter)
     root_logger.addHandler(console_handler)
-
-
-
 
 
 if __name__ == "__main__":

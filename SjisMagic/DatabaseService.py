@@ -43,39 +43,4 @@ def setup_db():
     logger.info(f'Connected.')
 
 
-def upsert_extracted_texts(texts):
-    announce_status(f"Inserting {len(texts):,} translations")
 
-    start_time = time.time()
-
-    results = defaultdict(int)
-    with sqlite_db.atomic():
-        for text in texts:
-            try:
-                # Remove extra whitespace
-                text = text.strip()
-
-                if not text or text.isspace():
-                    results['Whitespace'] += 1
-                    continue  # Can't translate whitespace
-
-                # Insert if it's not in here already
-                upserted_tran = Translation.insert(extracted_text=text,
-                                                   text_length=len(text)).on_conflict_ignore().execute()
-
-                if upserted_tran:
-                    results['New Phrase'] += 1
-                    logger.debug(f'New phrase: {text}')
-                else:
-                    results['Already Exists'] += 1
-                    logger.debug(f"Already inserted: {text}")
-            except Exception as e:
-                logger.error(f"Insert failed for '{text}'\n{type(e).__name__}: {e}")
-
-    elapsed_time = time.time() - start_time
-    for result in results.keys():
-        logger.info(f"Result '{result}' count: {results[result]:,}")
-
-    logger.info(f"Inserted {results['New Phrase']:,} new strings.")
-    logger.info(f"Processed {len(texts):,} texts in {elapsed_time:,.2f} seconds.")
-    logger.info(f"Rec/sec: {len(texts) / elapsed_time:,.0f} ")

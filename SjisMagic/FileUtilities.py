@@ -3,6 +3,7 @@ import logging
 logger = logging.getLogger('utils')
 logger.setLevel(logging.INFO)
 
+
 def check_file_contains_bytes(search_bytes, source_file_path):
     # Make sure it all exits in the source file
     with open(source_file_path, 'rb') as f:
