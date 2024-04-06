@@ -1,10 +1,9 @@
 import asyncio
-import getopt
-import os
 import sys
 from dotenv import load_dotenv
 from SjisMagic import SjisExtractor, DataProcessorService, AnthropicService, DatabaseService
 import logging
+from decouple import config
 from utils import announce_status
 
 # Let's setup some logging!
@@ -12,38 +11,34 @@ logger = logging.getLogger('main')
 logger.setLevel(logging.INFO)
 
 
-async def main(argv):
+async def main():
     """
     Extract shift-jis strings from a file. (Like a dll from your favorite Japanese rhythm game...) Export a dictionary
-    of what we find. Translate the sjis strings via GPT. Invalid sjis strings will be dropped
+    of what we find. Translate the sjis strings via AI. Invalid sjis strings will be dropped
     from the final file. Final result is a popnhax compatible translation file!
 
-    NOTE: This uses the OpenAI API. This is a paid service, You'll need an account, and it will cost a little money.
-    (If you translate enough to use up the free monthly allocation.) https://platform.openai.com/
-
-    :param argv: -i Path to input file, -o Path for output file. (opt)
+    NOTE: This uses the Athropic, Google, and, OpenAI APIs. (Usage is optional) This is a paid service, You'll need an
+    account, and it will cost a little money.
     """
 
     # Let's get things setup
     setup_logging()
-    load_dotenv()
     DatabaseService.setup_db()
 
     # Fetch our params
-    text_codec = os.getenv("TEXT_CODEC")
-    input_file_path, output_file_path = parse_args(argv)
-
-    # Ok. Time to get to work
-    announce_status('Starting up')
+    input_file_path, output_file_path, text_codec = await fetch_settings()
     logger.info(f"Extracting: {input_file_path}")
     logger.info(f"Creating:   {output_file_path}")
     logger.info(f'Codec: {text_codec}')
+
+    # Ok. Time to get to work
+    announce_status('Starting up')
 
     # Extract strings from binary
     # SjisExtractor.extract_strings(input_file_path, text_codec)
 
     # Clean out stuff we don't want to translate
-    #DataProcessorService.exclude_too_short_strings(min_length=4)
+    # DataProcessorService.exclude_too_short_strings(min_length=4)
 
     logger.info('Translating japanese text ...')
     DataProcessorService.translate_strings()
@@ -52,20 +47,11 @@ async def main(argv):
     logger.info('Complete!')
 
 
-def parse_args(argv):
-    # Retrieve our arguments
-    opts, args = getopt.getopt(argv, "i:o:", ["inputFile=", "outputFile="])
-
-    # Parse out the file names
-    input_file_path = ""
-    output_file_path = ""
-    for opt, arg in opts:
-        if opt in ("-i", "--inputFile"):
-            input_file_path = arg
-        elif opt in ("-o", "--outputFile"):
-            output_file_path = arg
-    output_file_path = output_file_path if output_file_path else input_file_path + "_translated.dict"
-    return input_file_path, output_file_path
+async def fetch_settings():
+    text_codec = config('TEXT_CODEC', default='shift_jisx0213')
+    input_file_path = config('INPUT_FILE_PATH', default='working/popn22.dll')
+    output_file_path = config('OUTPUT_FILE_PATH', default='working/popn22.dict')
+    return input_file_path, output_file_path, text_codec
 
 
 def setup_logging():
@@ -81,4 +67,4 @@ def setup_logging():
 
 
 if __name__ == "__main__":
-    asyncio.run(main(sys.argv[1:]))
+    asyncio.run(main())

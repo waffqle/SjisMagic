@@ -3,13 +3,54 @@ from enum import Enum
 from SjisMagic import OpenAIService, AnthropicService
 from SjisMagic.DatabaseService import *
 
-logger = logging.getLogger('cleanup')
+logger = logging.getLogger('dataprocessor')
 logger.setLevel(logging.INFO)
 
 
+# We're supporting multiple models for translation and paraphrasing.
+# We'll then compare the translations and accept the best one.
 class Brain(Enum):
     ChatGPT = 1
     Claude = 2
+    Google = 3
+
+
+def translate_strings():
+    """
+    Search the DB for untranslated strings and go to work on em. Commits in batches so work doesn't get lost.
+    """
+    with sqlite_db.atomic():
+        # Is there anything to translate?
+        logger.info(f"Translatables: {Translation.select().where(Translation.untranslated).count()}")
+
+        # Let's go!
+        for translatable in Translation.select().where(Translation.untranslated).iterator():
+            translatable.english_translation = translate(translatable.extracted_text, Brain.ChatGPT)
+            logger.info(f"Translated '{translatable.extracted_text}' to '{translatable.english_translation}")
+
+
+def translate(text: str, brain) -> str:
+    if brain == Brain.ChatGPT:
+        return OpenAIService.translate(text)
+    elif brain == Brain.Claude:
+        return AnthropicService.translate(text)
+    elif brain == Brain.Google:
+        raise NotImplemented
+    else:
+        return 'Fart Fart Fart. Not a legit brain.'
+
+
+def cull_translations(translation_dic: dict):
+    logger.debug(f"Culling translations: {translation_dic}")
+
+    unwanted_things = {'NNN', 'PPP', 'CCC'}  # better membership test than list
+
+    keys_to_remove = [key for key, value in translation_dic.items() if value in unwanted_things]
+    for key in keys_to_remove:
+        del translation_dic[key]
+
+    logger.debug(f"Culled: {translation_dic}")
+    return translation_dic
 
 
 def exclude_too_short_strings(min_length: int):
@@ -56,43 +97,3 @@ def exclude_unfindable_strings(source_file, all_fields, translation_targets, err
             errors[type(e).__name__] += 1
             logger.debug(f"Field: {field}")
             logger.debug(f"Issue: {e}")
-
-
-def translate_strings():
-    """
-    Search the DB for untranslated strings and go to work on em. Commits in batches so work doesn't get lost.
-    """
-    with sqlite_db.atomic():
-        # Is there anything to translate?
-        translatables = Translation.select().where(Translation.english_translation == '',
-                                                   Translation.exclude_from_translation == 0)
-
-        logger.info(f"Translatables: {len(translatables)}")
-        # Let's go!
-        for translatable in Translation.select().where(Translation.english_translation == '',
-                                                       Translation.exclude_from_translation == 0).iterator():
-            logger.info(f"Translatable: {translatable}")
-            translatable.english_translation = translate(translatable.extracted_text, Brain.ChatGPT)
-            logger.info(f"Translated '{translatable.extracted_text}' to '{translatable.english_translation}")
-
-
-def translate(text: str, brain) -> str:
-    if brain == Brain.ChatGPT:
-        return OpenAIService.translate(text)
-    elif brain == Brain.Claude:
-        return AnthropicService.translate(text)
-    else:
-        return 'Fart Fart Fart'
-
-
-def cull_translations(translation_dic: dict):
-    logger.debug(f"Culling translations: {translation_dic}")
-
-    unwanted_things = {'NNN', 'PPP', 'CCC'}  # better membership test than list
-
-    keys_to_remove = [key for key, value in translation_dic.items() if value in unwanted_things]
-    for key in keys_to_remove:
-        del translation_dic[key]
-
-    logger.debug(f"Culled: {translation_dic}")
-    return translation_dic

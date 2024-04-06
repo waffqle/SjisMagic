@@ -3,3 +3,4 @@ openai~=1.4.0
 python-dotenv~=1.0.0
 anthropic~=0.21.3
 peewee~=3.17.1
+python-decouple
