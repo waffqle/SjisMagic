@@ -32,8 +32,8 @@ def translate(text: str) -> str:
     )
 
     logger.debug(f"response: {message}")
-    response_content = message.choices[0].message.content
-    translated_string = json.loads(response_content)["response"]
+    response_content = message.content[0].text
+    translated_string = json.loads(response_content)["translations"][0]["translation"]
     logger.debug(f"translated_string: {translated_string}")
     return translated_string
 

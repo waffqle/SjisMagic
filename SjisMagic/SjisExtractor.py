@@ -4,8 +4,9 @@ I owe this fella way too many beers at this point.
 -FuckwilderTuesday
 """
 import re
+import time
+from collections import defaultdict
 
-from SjisMagic import DatabaseService
 from SjisMagic.DatabaseService import *
 from utils import announce_status
 
@@ -30,7 +31,8 @@ def extract_strings(input_file_path: str, encoding: str):
         codec_regex = b'[\x81-\x9f\xe0-\xef][\x40-\x7e\x80-\xfc]+'
         extract_strings_with_codec(input_file_path, codec_regex)
     elif encoding == 'shift_jisx0213':
-        codec_regex = b'(?:[\x87-\x9f\xe0-\xef][\x40-\x7e\x80-\xfc ]+|[\x81-\x84][\x40-\x7e\x80-\xfc ]|[\xed-\xee][\x40-\x7e\x80-\xfc ]|[\xfa-\xfc][\x40-\x7e\x80-\xfc ])+'
+        codec_regex = (b'(?:[\x87-\x9f\xe0-\xef][\x40-\x7e\x80-\xfc ]+|[\x81-\x84][\x40-\x7e\x80-\xfc ]|[\xed-\xee]['
+                       b'\x40-\x7e\x80-\xfc ]|[\xfa-\xfc][\x40-\x7e\x80-\xfc ])+')
         extract_strings_with_codec(input_file_path, codec_regex)
     else:
         raise Exception('Invalid encoding.')

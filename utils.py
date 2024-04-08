@@ -1,5 +1,4 @@
 import logging
-from enum import Enum
 
 # Let's setup some logging!
 logger = logging.getLogger('status')

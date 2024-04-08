@@ -1,10 +1,8 @@
 import logging
 import os
+
 from peewee import *
 from playhouse.sqlite_ext import SqliteExtDatabase
-from playhouse.hybrid import *
-
-from utils import announce_status
 
 logger = logging.getLogger('database')
 logger.setLevel(logging.INFO)
@@ -23,6 +21,19 @@ class BaseModel(Model):
         database = sqlite_db
 
 
+def get_untranslated_items(count: int) -> list:
+    # TODO: Add google support at some point
+    return Translation.select().where(Translation.exclude_from_translation == 0,
+                                      Translation.openai_translation == '' or Translation.anthropic_translation == '').limit(
+        count)
+
+
+def get_untranslated_items_count() -> int:
+    # TODO: Add google support at some point
+    return Translation.select().where(Translation.exclude_from_translation == 0,
+                                      Translation.openai_translation == '' or Translation.anthropic_translation == '').count()
+
+
 class Translation(BaseModel):
     extracted_text = TextField(primary_key=True, default='')
     unicode_text = TextField(default='')
@@ -34,10 +45,6 @@ class Translation(BaseModel):
     exclude_from_translation = IntegerField(default=False)
     exclusion_reason = TextField(default='')
     text_length = IntegerField(default=0)
-
-    @hybrid_property
-    def untranslated(self):
-        return self.openai_translation == '' or self.anthropic_translation == '' or self.google_translation == ''
 
 
 def setup_db():

@@ -1,9 +1,10 @@
 import asyncio
-import sys
-from dotenv import load_dotenv
-from SjisMagic import SjisExtractor, DataProcessorService, AnthropicService, DatabaseService
 import logging
+import sys
+
 from decouple import config
+
+from SjisMagic import DataProcessorService, DatabaseService, SjisExtractor
 from utils import announce_status
 
 # Let's setup some logging!
@@ -17,7 +18,7 @@ async def main():
     of what we find. Translate the sjis strings via AI. Invalid sjis strings will be dropped
     from the final file. Final result is a popnhax compatible translation file!
 
-    NOTE: This uses the Athropic, Google, and, OpenAI APIs. (Usage is optional) This is a paid service, You'll need an
+    NOTE: This uses the Anthropic, Google, and/or, OpenAI APIs. (Usage is optional) This is a paid service, You'll need an
     account, and it will cost a little money.
     """
 
@@ -35,15 +36,20 @@ async def main():
     announce_status('Starting up')
 
     # Extract strings from binary
-    # SjisExtractor.extract_strings(input_file_path, text_codec)
+    extract = False
+    if not extract:
+        announce_status('Skipping extraction')
+    else:
+        SjisExtractor.extract_strings(input_file_path, text_codec)
 
-    # Clean out stuff we don't want to translate
-    # DataProcessorService.exclude_too_short_strings(min_length=4)
+    # Exclude stuff we don't want to translate
+    DataProcessorService.exclude_too_short_strings(min_length=4)
+    DataProcessorService.exclude_repetitive_strings(50)
+    DataProcessorService.exclude_not_japanese_enough_strings(60)
 
     logger.info('Translating japanese text ...')
-    DataProcessorService.translate_strings()
+    await DataProcessorService.crank_up_translation_machine(5)
 
-    dict_file_path = f'{input_file_path.replace('.dll', '.dict')}'
     logger.info('Complete!')
 
 
