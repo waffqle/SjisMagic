@@ -1,5 +1,6 @@
 import asyncio
 from enum import Enum
+from itertools import *
 import re
 
 import unicodedata
@@ -39,35 +40,38 @@ async def crank_up_translation_machine(batch_size=100):
     else:
         logger.info(f"We'll handle em in batches of {batch_size:,}.")
 
-    # Keep on working till the work is done.
-    while get_untranslated_items_count() > 0:
-        # Fetch a chunk - Working in small chunks is easier to monitor than queuing up thousands of tasks at once
-        translatables_batch = get_untranslated_items(batch_size)
+    # Get all things that need translating
+    translateables = get_untranslated_items(-1)
+    for translateable in chunked(translateables, batch_size):
+        with sqlite_db.atomic():
+            logger.info(f'Processing {len(translateable)} strings.')
+            taskset = set()
+            # Put it in the queue
+            for trans in translateable:
+                # Do we need Claude version?
 
-        logger.info(f'Queuing up {len(translatables_batch):,} items.')
+                if trans.anthropic_translation == '':
+                    task_claude = asyncio.create_task(translate_and_save(trans, Brain.Claude))
+                    taskset.add(task_claude)
 
-        taskset = set()
-        # Put it in the queue
-        for trans in translatables_batch:
-            # Do we need Claude version?
-            if trans.anthropic_translation == '':
-                task_claude = asyncio.create_task(translate_and_save(trans, Brain.Claude))
-                task_claude.add_done_callback(taskset.discard)
-                taskset.add(task_claude)
+                # Do we need GPT translation?
+                if trans.openai_translation == '':
+                    task_openai = asyncio.create_task(translate_and_save(trans, Brain.ChatGPT))
+                    taskset.add(task_openai)
 
-            # Do we need GPT translation?
-            if trans.openai_translation == '':
-                task_openai = asyncio.create_task(translate_and_save(trans, Brain.ChatGPT))
-                task_openai.add_done_callback(taskset.discard)
-                taskset.add(task_openai)
-
-        await (asyncio.gather(*taskset, return_exceptions=True))
+            # Log any errors.
+            # We don't break, too annoying to set it off on 10k+ translations and have it fail on 5,000...
+            results = await (asyncio.gather(*taskset, return_exceptions=True))
+            for i, result in enumerate(results, start=1):
+                if isinstance(result, Exception):
+                    logger.warning(f"Error on task {i}: {result}")
 
     else:
         logger.info(f'No more items to queue!')
 
 
 async def translate_and_save(trans: Translation, brain):
+    logger.debug(f"Translating '{trans.extracted_text}'...")
     if brain == Brain.ChatGPT:
         trans.openai_translation = OpenAIService.translate(trans.extracted_text)
         logger.debug(f'Translated (GPT): "{trans.extracted_text}" to "{trans.openai_translation}"')
@@ -76,6 +80,8 @@ async def translate_and_save(trans: Translation, brain):
         logger.debug(f'Translated (Claude): "{trans.extracted_text}" to "{trans.anthropic_translation}"')
     elif brain == Brain.Google:
         raise NotImplemented
+    else:
+        logger.error(f'Unknown brain {brain}')
 
     trans.save()
 

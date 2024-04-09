@@ -48,7 +48,7 @@ async def main():
     DataProcessorService.exclude_not_japanese_enough_strings(60)
 
     logger.info('Translating japanese text ...')
-    await DataProcessorService.crank_up_translation_machine(5)
+    await DataProcessorService.crank_up_translation_machine(10)
 
     logger.info('Complete!')
 

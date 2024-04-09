@@ -15,26 +15,19 @@ def translate(text) -> str:
         api_key=os.environ.get("OPENAI_API_KEY"),
     )
     response = client.chat.completions.create(
-        model="gpt-4-turbo-preview",
+        model="gpt-3.5-turbo",
         messages=[
             {
                 "role": "system",
-                "content": ('Your job is to translate Japanese phrases from the rhythm game Pop\'n Music into '
-                            'English. You will receive lists of phrases that should be individually translated.\n'
-                            '\n'
-                            'Process them using the following steps:\n'
-                            '- If the Japanese is nonsensical, translate it as \'NNN\'.\n'
-                            '- If the phrase is intended to be parsed by a program rather than read by a human, '
-                            'translate it as \'PPP\'.\n'
-                            '- If the phrase contains Chinese characters, translate it as \'CCC\'.\n'
-                            f'- Otherwise translate it to English. The translation must not be more than {length} '
-                            f'characters, including spaces. Paraphrasing, abbreviation, symbols, emoji, and modified '
-                            f'spelling are all acceptable. Removing letters is also acceptable. '
-                            f'\n'
-                            'Think step by step. \n'
-                            '\n'
-                            'Please return the translations as JSON in the following format:\n'
-                            '{ translations:[ original:"" translation:""]}'
+                "content": ("Your job is to translate Japanese phrases from the rhythm game Pop'n Music into English. "
+                            "\nProcess phrases using the following "
+                            "steps:\n\n- If the Japanese is nonsensical, translate it as 'NNN'.\n- If the phrase is "
+                            "meant to be parsed by a program, translate it as 'PPP'.\n- Otherwise translate it to "
+                            "English. \n- Your translations should be as short as possible. Paraphrasing, "
+                            "abbreviation, using incorrect spelling, and symbols are all ok. \n- Your translation "
+                            "should not be longer than the Japanese phrase. Spaces and symbols count towards the "
+                            "length.\n\n\nPlease return the translations as JSON in the following format:\n{ \n  "
+                            "translations:[\n    original:\"\"\n    translation:\"\"\n  ]\n}"
                             )
             },
             {

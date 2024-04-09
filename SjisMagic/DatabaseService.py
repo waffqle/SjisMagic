@@ -22,16 +22,18 @@ class BaseModel(Model):
 
 
 def get_untranslated_items(count: int) -> list:
+    # -1 = Return all rows
     # TODO: Add google support at some point
     return Translation.select().where(Translation.exclude_from_translation == 0,
-                                      Translation.openai_translation == '' or Translation.anthropic_translation == '').limit(
-        count)
+                                      Translation.openai_translation == ''
+                                      or Translation.anthropic_translation == '').limit(count)
 
 
 def get_untranslated_items_count() -> int:
     # TODO: Add google support at some point
     return Translation.select().where(Translation.exclude_from_translation == 0,
-                                      Translation.openai_translation == '' or Translation.anthropic_translation == '').count()
+                                      Translation.openai_translation == ''
+                                      or Translation.anthropic_translation == '').count()
 
 
 class Translation(BaseModel):
