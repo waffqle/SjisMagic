@@ -22,7 +22,7 @@ def translate(text: str) -> str:
                "parsed by a program, translate it as 'PPP'.\n- Otherwise translate it to English. \n- Your "
                "translations should be as short as possible. Paraphrasing, abbreviation, using incorrect spelling, "
                "and symbols are all ok. \n- Your translation should not be longer than the Japanese phrase. Spaces "
-               "and symbols count towards the length.\n\n\nPlease return the translations as JSON in the following "
+               "and symbols count towards the length. \n\n\nPlease return the translations as JSON in the following"
                "format:\n{ \n  translations:[\n    original:\"\"\n    translation:\"\"\n  ]\n}",
         messages=[{
             "role": "user",

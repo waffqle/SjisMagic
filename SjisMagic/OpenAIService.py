@@ -26,7 +26,7 @@ def translate(text) -> str:
                             "English. \n- Your translations should be as short as possible. Paraphrasing, "
                             "abbreviation, using incorrect spelling, and symbols are all ok. \n- Your translation "
                             "should not be longer than the Japanese phrase. Spaces and symbols count towards the "
-                            "length.\n\n\nPlease return the translations as JSON in the following format:\n{ \n  "
+                            "length.\n\nPlease return the translations as JSON in the following format:\n{ \n"
                             "translations:[\n    original:\"\"\n    translation:\"\"\n  ]\n}"
                             )
             },

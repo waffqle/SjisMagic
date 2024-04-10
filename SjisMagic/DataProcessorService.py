@@ -51,9 +51,9 @@ async def crank_up_translation_machine(batch_size=100):
             for trans in translateable:
                 # Do we need Claude version?
 
-                if trans.anthropic_translation == '':
-                    task_claude = asyncio.create_task(translate_and_save(trans, Brain.Claude))
-                    taskset.add(task_claude)
+                # if trans.anthropic_translation == '':
+                #     task_claude = asyncio.create_task(translate_and_save(trans, Brain.Claude))
+                #     taskset.add(task_claude)
 
                 # Do we need GPT translation?
                 if trans.openai_translation == '':
@@ -145,6 +145,57 @@ def exclude_unfindable_strings(source_file, text_codec):
     logger.info(f"Excluded {error_count:,} strings. Reason: Error checking source.")
 
 
+def convert_everything_to_fullwidth():
+    """
+    Convert all strings to full width format.
+    """
+    announce_status(f"Converting to full width format.")
+
+    translated_strings = Translation.select().where(Translation.openai_translation != '',
+                                                    Translation.anthropic_translation != '')
+    logger.info(f'Reviewing {translated_strings.count():,} strings.')
+
+    exclusion_count = 0
+    # Let's go through em all.
+    with sqlite_db.atomic():
+        for translated_string in translated_strings:
+            # Convert to full width
+            extracted_text = translated_string.extracted_text
+            openai_phrase = translated_string.openai_translation
+            anthropic_phrase = translated_string.anthropic_translation
+            fw_openai = to_fullwidth(openai_phrase)
+            fw_anthropic = to_fullwidth(anthropic_phrase)
+
+            # Don't save unless something actually got changed.
+            if fw_openai != openai_phrase or fw_anthropic != anthropic_phrase:
+                logger.debug(f"Converted Open AI: '{openai_phrase}' to '{fw_openai}'")
+                logger.debug(f"Converted Claude: '{anthropic_phrase}' to '{fw_anthropic}'")
+                # Save it!
+                Translation.update(openai_translation=fw_openai, anthropic_translation=fw_anthropic).where(
+                    Translation.extracted_text == extracted_text).execute()
+
+
+def to_fullwidth(phrase: str):
+    """
+    Converts a string to full-width characters.
+
+    :param phrase: The string to be converted.
+    :return: A string with each character converted to its full-width form.
+    """
+    fullwidth_chars = []
+    for char in phrase:
+        # Convert space separately since it doesn't follow the direct mapping rule
+        if char == ' ':
+            fullwidth_chars.append('\u3000')  # Full-width space
+        elif '\u0021' <= char <= '\u007E':
+            # Shift character code to match full-width range
+            fullwidth_chars.append(chr(ord(char) - 0x0020 + 0xFF00))
+        else:
+            # Leave characters as is if they are not in the half-width range
+            fullwidth_chars.append(char)
+    return ''.join(fullwidth_chars)
+
+
 def cull_translations(translation_dic: dict):
     logger.debug(f"Culling translations: {translation_dic}")
 
@@ -191,6 +242,24 @@ def is_string_nonrepeating(phrase: str, repetition_limit: int):
 def is_string_long_enough(phrase: str, min_length: int):
     if len(phrase) < min_length:
         logger.debug(f"Too short - Excluding: {phrase}")
+        return False
+    return True
+
+
+def are_latin_chars_fullwidth(phrase):
+    """
+    Check if the input string contains any non-fullwidth Latin characters.
+
+    :param phrase: The string to be checked.
+    :return: True if the string contains non-fullwidth Latin characters, False otherwise.
+    """
+    # Regex pattern for non-fullwidth Latin characters (A-Z, a-z)
+    pattern = r'[A-Za-z]'
+
+    halfwidth_found = bool(re.search(pattern, phrase))
+
+    if halfwidth_found:
+        logger.debug(f"Half width latin - Excluding: {phrase}")
         return False
     return True
 
