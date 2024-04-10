@@ -1,13 +1,14 @@
 import asyncio
-from enum import Enum
-from itertools import *
 import re
+from enum import Enum
+from typing import Callable
 
 import unicodedata
 
 import utils
 from SjisMagic import OpenAIService, AnthropicService
 from SjisMagic.DatabaseService import *
+from SjisMagic.DatabaseService import exclude_string
 from utils import announce_status
 
 logger = logging.getLogger('dataprocessor')
@@ -86,6 +87,64 @@ async def translate_and_save(trans: Translation, brain):
     trans.save()
 
 
+def exclude_strings(exclusion_reason: str, excluder: Callable, *kwargs):
+    """
+    Test all strings in the DB against the given function.
+    :param exclusion_reason: Reason to list in DB  for why these strings are excluded
+    :param excluder: Function to test string against. True = exclude, False = include
+    """
+    announce_status(f"Excluding strings via function {excluder}.")
+
+    non_excluded_strings = Translation.select().where(Translation.exclude_from_translation == 0).count()
+    logger.info(f'Reviewing {non_excluded_strings:,} strings.')
+
+    exclusion_count = 0
+    # Let's go through em all.
+    stuff_to_review = Translation.select().where(Translation.exclude_from_translation == 0)
+    with sqlite_db.atomic():
+        for item in stuff_to_review:
+            jap_text = item.extracted_text
+            # Test string against our exclusion function
+            if not excluder(jap_text, *kwargs):
+                exclude_string(jap_text, exclusion_reason)
+                exclusion_count += 1
+
+        logger.info(f'Excluded {exclusion_count:,} strings. Reason: {exclusion_reason}')
+
+
+def exclude_unfindable_strings(source_file, text_codec):
+    announce_status(f"Examining '{source_file}' to ensure extracted strings are present.")
+    # We'll look to make sure our strings exist in this file
+    with open(source_file, 'rb') as f:
+        contents = f.read()
+
+    non_excluded_strings = Translation.select().where(Translation.exclude_from_translation == 0).count()
+    logger.info(f'Reviewing {non_excluded_strings:,} strings.')
+
+    exclusion_count = 0
+    error_count = 0
+    # Let's go through em all.
+    stuff_to_review = Translation.select().where(Translation.exclude_from_translation == 0)
+    with sqlite_db.atomic():
+        # Make sure to catch exceptions here. If we fucked up our encoding/decoding somewhere, it'll show up here.
+        for phrase in [x.extracted_text.encode(text_codec) for x in stuff_to_review]:
+            try:
+                # Make sure the data is actually in the file.
+                # If we can't match the string to the source file... we fucked up somewhere.
+                if contents.find(phrase) == -1:
+                    logger.debug(f"Unable to relocate extracted string in original file: {phrase.decode(text_codec)}")
+                    exclude_string(phrase, 'Missing in Source File')
+                    exclusion_count += 1
+
+            except Exception as e:
+                logger.debug(f"Error checking for '{phrase}' in source: {e.__class__.__name__}")
+                exclude_string(phrase, "Error Checking Source File")
+                error_count += 1
+
+    logger.info(f"Excluded {exclusion_count:,} strings. Reason: Missing in source.")
+    logger.info(f"Excluded {error_count:,} strings. Reason: Error checking source.")
+
+
 def cull_translations(translation_dic: dict):
     logger.debug(f"Culling translations: {translation_dic}")
 
@@ -99,57 +158,47 @@ def cull_translations(translation_dic: dict):
     return translation_dic
 
 
-def exclude_too_short_strings(min_length: int):
-    announce_status(f"Excluding strings below {min_length} from translation.")
-
-    with sqlite_db.atomic():
-        query = Translation.update(exclude_from_translation=True, exclusion_reason='Too Short').where(
-            Translation.text_length < min_length, Translation.exclude_from_translation == 0)
-        rows_touched = query.execute()
-
-    logger.info(f"Excluded {rows_touched:,} short phrases.")
-
-
-def exclude_repetitive_strings(min_variety: int):
-    announce_status(f"Excluding strings below {min_variety}% character variety.")
-
-    non_excluded_strings = Translation.select().where(Translation.exclude_from_translation == 0).count()
-    logger.info(f'Reviewing {non_excluded_strings:,} strings.')
-
-    exclusion_count = 0
-    # Let's go through em all.
-    stuff_to_review = Translation.select().where(Translation.exclude_from_translation == 0)
-    with sqlite_db.atomic():
-        for item in stuff_to_review:
-            jap_text = item.extracted_text
-            # Does the string have a variety of different characters?
-            char_variety = calc_character_variety_percentage(jap_text)
-
-            # Does the same character repeat a bunch?
-            pattern = r'(.)\1{' + str(4) + r'}'
-            repeats = re.search(pattern, jap_text) is not None
-
-            exclude = False
-            reason = ''
-            if char_variety < min_variety:
-                exclude = True
-                reason = 'No character variety'
-                logger.debug(f"Excluded: {char_variety:.0f}% -  {jap_text}")
-                exclusion_count += 1
-            elif repeats:
-                exclude = True
-                reason = 'Character repeats'
-                logger.debug(f"Excluded due to repeats:-  {jap_text}")
-                exclusion_count += 1
-
-            if exclude:
-                Translation.update(exclude_from_translation=True, exclusion_reason=reason).where(
-                    Translation.extracted_text == item).execute()
-
-    logger.info(f"Excluded {exclusion_count:,} strings.")
+# region String validators
+def is_string_japanese_enough(phrase: str, min_jap_perc: int):
+    jap_perc = calc_japanese_percentage(phrase)
+    if jap_perc < min_jap_perc:
+        logger.debug(f"Japanese-ness: {jap_perc:.0f}% - Excluding: {phrase}")
+        return False
+    else:
+        return True
 
 
-def calc_character_variety_percentage(input_string):
+def is_string_variant_enough(phrase: str, min_variety: int):
+    # Does the string have a variety of different characters?
+    char_variety = calc_character_variety_percentage(phrase)
+
+    if char_variety < min_variety:
+        logger.debug(f"Char Variety: {char_variety:.0f}% -  {phrase}")
+        return False
+    return True
+
+
+def is_string_nonrepeating(phrase: str, repetition_limit: int):
+    # Regular expression to match a sequence of repeating characters
+    pattern = r'(.)\1{' + str(repetition_limit - 1) + r'}'
+
+    if re.search(pattern, phrase) is not None:
+        logger.debug(f"Too much repetition - Excluding: {phrase}")
+        return False
+    return True
+
+
+def is_string_long_enough(phrase: str, min_length: int):
+    if len(phrase) < min_length:
+        logger.debug(f"Too short - Excluding: {phrase}")
+        return False
+    return True
+
+
+# endregion
+
+# region Supporting Items
+def calc_character_variety_percentage(input_string: str):
     """
     Calculates the variety of characters in a string, expressed as a percentage.
 
@@ -166,39 +215,18 @@ def calc_character_variety_percentage(input_string):
     return variety_percentage
 
 
-def exclude_not_japanese_enough_strings(min_jap_perc):
-    announce_status(f"Excluding strings below {min_jap_perc}% Japanese characters from translation.")
-
-    non_jap_count = Translation.select().where(Translation.exclude_from_translation == 0).count()
-    logger.info(f'Reviewing {non_jap_count:,} strings.')
-
-    exclusion_count = 0
-    # Let's go through em all.
-    stuff_to_review = Translation.select().where(Translation.exclude_from_translation == 0)
-    with sqlite_db.atomic():
-        for item in stuff_to_review:
-            jap_perc = calc_japanese_percentage(item.extracted_text)
-            if jap_perc < min_jap_perc:
-                Translation.update(exclude_from_translation=True, exclusion_reason='Not Japanese Enough').where(
-                    Translation.extracted_text == item).execute()
-                logger.debug(f"Excluded: {jap_perc:.0f}% -  {item.extracted_text}")
-                exclusion_count += 1
-
-    logger.info(f"Excluded {exclusion_count:,} strings.")
-
-
 def calc_japanese_percentage(input_string):
     """Calculate the percentage of Japanese characters in a string."""
     if not input_string:
         return 0  # Return 0% if the input string is empty or None
 
     total_chars = len(input_string)
-    japanese_chars = sum(is_japanese(char) for char in input_string)
+    japanese_chars = sum(is_char_japanese(char) for char in input_string)
 
     return (japanese_chars / total_chars) * 100
 
 
-def is_japanese(char):
+def is_char_japanese(char):
     """Check if a character is Japanese."""
     # Check for Hiragana and Katakana
     if '\u3040' <= char <= '\u309F' or '\u30A0' <= char <= '\u30FF':
@@ -220,30 +248,4 @@ def is_japanese(char):
                     'KATAKANA' in unicodedata.name(char, '')])
     return False
 
-
-def exclude_unfindable_strings(source_file, all_fields, translation_targets, errors, text_codec):
-    # This function wants the RAW BYTES.
-    # Not the decoded string.
-
-    announce_status(f"Examining '{source_file}' to ensure extracted strings are present.")
-    # We'll look to make sure our strings exist in this file
-    with open(source_file, 'rb') as f:
-        contents = f.read()
-
-    # It's a bit wasteful to re-encode stuff we just decoded.
-    # However, it's a handy validation that our values are round-tripping accurately
-    for field in [x.encode(text_codec) for x in all_fields]:
-        try:
-            # Make sure the data is actually in the file.
-            # If we can't match the string to the source file... we fucked up somewhere.
-            if contents.find(field) == -1:
-                errors['Missing In Source'] += 1
-                logger.error(f"Unable to relocate extracted string in original file: {field.decode(text_codec)}")
-                continue
-            else:
-                translation_targets.append(field.decode(text_codec))
-
-        except Exception as e:
-            errors[type(e).__name__] += 1
-            logger.debug(f"Field: {field}")
-            logger.debug(f"Issue: {e}")
+# endregion

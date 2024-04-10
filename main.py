@@ -1,10 +1,10 @@
-import asyncio
-import logging
+import functools
 import sys
 
 from decouple import config
 
 from SjisMagic import DataProcessorService, DatabaseService, SjisExtractor
+from SjisMagic.DataProcessorService import *
 from utils import announce_status
 
 # Let's setup some logging!
@@ -43,11 +43,21 @@ async def main():
         SjisExtractor.extract_strings(input_file_path, text_codec)
 
     # Exclude stuff we don't want to translate
-    DataProcessorService.exclude_too_short_strings(min_length=4)
-    DataProcessorService.exclude_repetitive_strings(50)
-    DataProcessorService.exclude_not_japanese_enough_strings(60)
+    exclude_strings("Not Japanese Enough", functools.partial(is_string_japanese_enough, min_jap_perc=50))
 
-    logger.info('Translating japanese text ...')
+    exclude_strings("Not Variant Enough", functools.partial(is_string_variant_enough, min_variety=50))
+
+    exclude_strings("Too Many Repeating Chars", functools.partial(is_string_nonrepeating, repetition_limit=5))
+
+    exclude_strings("Too Short", functools.partial(is_string_long_enough, min_length=5))
+
+    exclude_unfindable_strings(input_file_path, text_codec)
+
+    # How many things are we actually gonna spend money on?
+    announce_status(f'{DatabaseService.get_untranslated_items_count() :,} phrases left to translate')
+
+    return
+
     await DataProcessorService.crank_up_translation_machine(10)
 
     logger.info('Complete!')
