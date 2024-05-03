@@ -6,7 +6,7 @@ from typing import Callable
 import unicodedata
 
 import utils
-from SjisMagic import OpenAIService, AnthropicService
+from SjisMagic import OpenAIService, AnthropicService, OllamaService
 from SjisMagic.DatabaseService import *
 from SjisMagic.DatabaseService import exclude_string
 from utils import announce_status
@@ -21,6 +21,7 @@ class Brain(Enum):
     ChatGPT = 1
     Claude = 2
     Google = 3
+    Ollama = 4
 
 
 async def crank_up_translation_machine(batch_size=100):
@@ -49,16 +50,10 @@ async def crank_up_translation_machine(batch_size=100):
             taskset = set()
             # Put it in the queue
             for trans in translateable:
-                # Do we need Claude version?
-
-                # if trans.anthropic_translation == '':
-                #     task_claude = asyncio.create_task(translate_and_save(trans, Brain.Claude))
-                #     taskset.add(task_claude)
-
-                # Do we need GPT translation?
-                if trans.openai_translation == '':
-                    task_openai = asyncio.create_task(translate_and_save(trans, Brain.ChatGPT))
-                    taskset.add(task_openai)
+                # Do we need a translation?
+                if trans.translation == '':
+                    task_translate = asyncio.create_task(translate_and_save(trans, Brain.Ollama))
+                    taskset.add(task_translate)
 
             # Log any errors.
             # We don't break, too annoying to set it off on 10k+ translations and have it fail on 5,000...
@@ -72,15 +67,17 @@ async def crank_up_translation_machine(batch_size=100):
 
 
 async def translate_and_save(trans: Translation, brain):
-    logger.debug(f"Translating '{trans.extracted_text}'...")
     if brain == Brain.ChatGPT:
-        trans.openai_translation = OpenAIService.translate(trans.extracted_text)
-        logger.debug(f'Translated (GPT): "{trans.extracted_text}" to "{trans.openai_translation}"')
+        trans.translation = OpenAIService.translate(trans.extracted_text)
+        logger.debug(f'Translated (GPT): "{trans.extracted_text}" to "{trans.translation}"')
     elif brain == Brain.Claude:
-        trans.anthropic_translation = AnthropicService.translate(trans.extracted_text)
-        logger.debug(f'Translated (Claude): "{trans.extracted_text}" to "{trans.anthropic_translation}"')
+        trans.translation = AnthropicService.translate(trans.extracted_text)
+        logger.debug(f'Translated (Claude): "{trans.extracted_text}" to "{trans.translation}"')
     elif brain == Brain.Google:
         raise NotImplemented
+    elif brain == Brain.Ollama:
+        trans.translation = OllamaService.translate(trans.extracted_text)
+        logger.debug(f'Translated (Ollama): "{trans.extracted_text}" to "{trans.translation}"')
     else:
         logger.error(f'Unknown brain {brain}')
 
@@ -145,14 +142,13 @@ def exclude_unfindable_strings(source_file, text_codec):
     logger.info(f"Excluded {error_count:,} strings. Reason: Error checking source.")
 
 
-def convert_everything_to_fullwidth():
+def convert_everythings_width(width: str):
     """
     Convert all strings to full width format.
     """
-    announce_status(f"Converting to full width format.")
+    announce_status(f"Converting to {width} width format.")
 
-    translated_strings = Translation.select().where(Translation.openai_translation != '',
-                                                    Translation.anthropic_translation != '')
+    translated_strings = Translation.select().where(Translation.translation != '')
     logger.info(f'Reviewing {translated_strings.count():,} strings.')
 
     exclusion_count = 0
@@ -161,17 +157,19 @@ def convert_everything_to_fullwidth():
         for translated_string in translated_strings:
             # Convert to full width
             extracted_text = translated_string.extracted_text
-            openai_phrase = translated_string.openai_translation
-            anthropic_phrase = translated_string.anthropic_translation
-            fw_openai = to_fullwidth(openai_phrase)
-            fw_anthropic = to_fullwidth(anthropic_phrase)
+            translation = translated_string.translation
+            if width == 'full':
+                adjusted_translation = to_fullwidth(translation)
+            elif width == 'standard':
+                adjusted_translation = to_standard_width(translation)
+            else:
+                Exception(f"Invalid width parameter: {width}")
 
             # Don't save unless something actually got changed.
-            if fw_openai != openai_phrase or fw_anthropic != anthropic_phrase:
-                logger.debug(f"Converted Open AI: '{openai_phrase}' to '{fw_openai}'")
-                logger.debug(f"Converted Claude: '{anthropic_phrase}' to '{fw_anthropic}'")
+            if adjusted_translation != translation:
+                logger.debug(f"Converted translation: '{translation}' to '{adjusted_translation}'")
                 # Save it!
-                Translation.update(openai_translation=fw_openai, anthropic_translation=fw_anthropic).where(
+                Translation.update(translation=adjusted_translation).where(
                     Translation.extracted_text == extracted_text).execute()
 
 
@@ -194,6 +192,10 @@ def to_fullwidth(phrase: str):
             # Leave characters as is if they are not in the half-width range
             fullwidth_chars.append(char)
     return ''.join(fullwidth_chars)
+
+
+def to_standard_width(full_width_string):
+    return unicodedata.normalize('NFKC', full_width_string)
 
 
 def cull_translations(translation_dic: dict):

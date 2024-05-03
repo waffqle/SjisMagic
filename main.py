@@ -1,10 +1,12 @@
+import asyncio
+import logging
 import functools
 import sys
 
 from decouple import config
 
-from SjisMagic import DataProcessorService, DatabaseService, SjisExtractor
-from SjisMagic.DataProcessorService import *
+from SjisMagic import DataProcessorService, DatabaseService, SjisExtractor, FileUtilities
+
 from utils import announce_status
 
 # Let's setup some logging!
@@ -18,8 +20,8 @@ async def main():
     of what we find. Translate the sjis strings via AI. Invalid sjis strings will be dropped
     from the final file. Final result is a popnhax compatible translation file!
 
-    NOTE: This uses the Anthropic, Google, and/or, OpenAI APIs. (Usage is optional) This is a paid service, You'll need an
-    account, and it will cost a little money.
+    NOTE: This uses the Anthropic, Google, and/or, OpenAI APIs. (Usage is optional) This is a paid service,
+    You'll need an account, and it will cost a little money. Ollama is free, just make sure you've got it running.
     """
 
     # Let's get things setup
@@ -44,62 +46,41 @@ async def main():
 
     # Exclude stuff we don't want to translate
     # All validations skip items that are already excluded. So do the slowest things last.
-    exclude_strings("Not Japanese Enough", functools.partial(is_string_japanese_enough, min_jap_perc=50))
+    DataProcessorService.exclude_strings("Not Japanese Enough",
+                                         functools.partial(DataProcessorService.is_string_japanese_enough,
+                                                           min_jap_perc=50))
 
-    exclude_strings("Not Variant Enough", functools.partial(is_string_variant_enough, min_variety=50))
+    DataProcessorService.exclude_strings("Not Variant Enough",
+                                         functools.partial(DataProcessorService.is_string_variant_enough,
+                                                           min_variety=50))
 
-    exclude_strings("Too Many Repeating Chars", functools.partial(is_string_nonrepeating, repetition_limit=5))
+    DataProcessorService.exclude_strings("Too Many Repeating Chars",
+                                         functools.partial(DataProcessorService.is_string_nonrepeating,
+                                                           repetition_limit=5))
 
-    exclude_strings("Too Short", functools.partial(is_string_long_enough, min_length=5))
+    DataProcessorService.exclude_strings("Too Short",
+                                         functools.partial(DataProcessorService.is_string_long_enough, min_length=3))
 
-    exclude_strings("Half Width Latin Chars", functools.partial(are_latin_chars_fullwidth))
+    # DataProcessorService.exclude_strings("Half Width Latin Chars",
+    #                                     functools.partial(DataProcessorService.are_latin_chars_fullwidth))
 
     # This takes way longer than our other validations. Make sure to do it last.
     # exclude_unfindable_strings(input_file_path, text_codec)
 
     # Pop'n doesn't like half width latin chars.
-    convert_everything_to_fullwidth()
+    # DataProcessorService.convert_everythings_width("standard")
 
-    # How many things are we actually gonna spend money on?
-    announce_status(f'{DatabaseService.get_untranslated_items_count() :,} phrases left to translate')
+    # How many things are we actually gonna spend money/time on?
+    announce_status(f'{DatabaseService.get_untranslated_items_count():,} phrases left to translate')
 
     # We work in batches for performance
-    await DataProcessorService.crank_up_translation_machine(50)
-    """
-        Test all strings in the DB against the given function.
-        :param exclusion_reason: Reason to list in DB  for why these strings are excluded
-        :param excluder: Function to test string against. True = exclude, False = include
-        """
-    announce_status(f"Excluding strings via function {excluder}.")
+    await DataProcessorService.crank_up_translation_machine(10)
 
-    non_excluded_strings = Translation.select().where(Translation.exclude_from_translation == 0).count()
-    logger.info(f'Reviewing {non_excluded_strings:,} strings.')
+    logger.info('Translation Complete!')
 
-    exclusion_count = 0
-    # Let's go through em all.
-    stuff_to_review = Translation.select().where(Translation.exclude_from_translation == 0)
-    with sqlite_db.atomic():
-        for item in stuff_to_review:
-            jap_text = item.extracted_text
-            # Test string against our exclusion function"""
-            #     Test all strings in the DB against the given function.
-            #     :param exclusion_reason: Reason to list in DB  for why these strings are excluded
-            #     :param excluder: Function to test string against. True = exclude, False = include
-            #     """
-            #     announce_status(f"Excluding strings via function {excluder}.")
-            #
-            #     non_excluded_strings = Translation.select().where(Translation.exclude_from_translation == 0).count()
-            #     logger.info(f'Reviewing {non_excluded_strings:,} strings.')
-            #
-            #     exclusion_count = 0
-            #     # Let's go through em all.
-            #     stuff_to_review = Translation.select().where(Translation.exclude_from_translation == 0)
-            #     with sqlite_db.atomic():
-            #         for item in stuff_to_review:
-            #             jap_text = item.extracted_text
-            #             # Test string against our exclusion function
-
-    logger.info('Complete!')
+    logger.info('Exporting .dict file...')
+    FileUtilities.write_popnhax_dict(output_file_path)
+    logger.info('All done!')
 
 
 async def fetch_settings():

@@ -1,5 +1,7 @@
 import logging
 
+from SjisMagic.DatabaseService import Translation
+
 logger = logging.getLogger('utils')
 logger.setLevel(logging.INFO)
 
@@ -15,25 +17,16 @@ def check_file_contains_bytes(search_bytes, source_file_path):
         return True
 
 
-def read_file_sjis(input_file_path):
-    input_file = open(input_file_path, "rb")
-    contents = input_file.read()
-    all_fields = contents.split(b';;;\x0A')
-    return all_fields
+def write_popnhax_dict(output_file_path):
+    # Find everything we translated and didn't exclude.
+    list_of_items = Translation.select().where(Translation.exclude_from_translation == 0,
+                                               Translation.translation != '')
 
-
-def write_file_sjis(output_file_path, list_of_items):
-    outputfile = open(output_file_path, "wb")
-    for word in list_of_items:
-        outputfile.write(word)
-        outputfile.write(b';;;\x0A')
-
-
-def write_popnhax_dict(output_file_path, list_of_items):
-    outputfile = open(output_file_path, "wb")
-    for word in list_of_items:
-        outputfile.write(word)
-
-        outputfile.write(b'\x0A')
-
-    outputfile.write(b';')
+    logger.info(f'Exporting {list_of_items.count()} dictionary items.')
+    outputfile = open(output_file_path, "w", encoding='shift_jisx0213')
+    for trans in list_of_items:
+        line = f';{trans.extracted_text};{trans.translation}\n'
+        try:
+            outputfile.write(line)
+        except Exception as e:
+            logger.warning(f'Error writing dict. Error: {e}\nLine: {line}')

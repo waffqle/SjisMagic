@@ -29,16 +29,19 @@ def extract_strings(input_file_path: str, encoding: str):
 
     if encoding == 'sjis':
         codec_regex = b'[\x81-\x9f\xe0-\xef][\x40-\x7e\x80-\xfc]+'
-        extract_strings_with_codec(input_file_path, codec_regex)
     elif encoding == 'shift_jisx0213':
-        codec_regex = (b'(?:[\x87-\x9f\xe0-\xef][\x40-\x7e\x80-\xfc ]+|[\x81-\x84][\x40-\x7e\x80-\xfc ]|[\xed-\xee]['
-                       b'\x40-\x7e\x80-\xfc ]|[\xfa-\xfc][\x40-\x7e\x80-\xfc ])+')
-        extract_strings_with_codec(input_file_path, codec_regex)
+        codec_regex = (b'(?:[\x87-\x9f\xe0-\xef][\x40-\x7e\x80-\xfc]+|[\x81-\x84][\x40-\x7e\x80-\xfc]|[\xed-\xee]['
+                       b'\x40-\x7e\x80-\xfc]|[\xfa-\xfc][\x40-\x7e\x80-\xfc])+\x00')
+    elif encoding == 'cp932':
+        codec_regex = b'[\x81-\x9f\xe0-\xef][\x40-\x7e\x80-\xfc]+\x00'
+
     else:
         raise Exception('Invalid encoding.')
 
+    extract_strings_with_codec(input_file_path, codec_regex, encoding)
 
-def extract_strings_with_codec(input_file_path: str, codec_regex: bytes):
+
+def extract_strings_with_codec(input_file_path: str, codec_regex: bytes, encoding: str):
     logger.info(f"Extracting from: {input_file_path}")
     with open(input_file_path, 'rb') as file:
         binary_data = file.read()
@@ -46,23 +49,21 @@ def extract_strings_with_codec(input_file_path: str, codec_regex: bytes):
     logger.debug(f"Read {len(binary_data):,} bytes from {input_file_path}")
 
     extracted_strings = set()
-    # Regular expression to match Shift JIS X 0213 encoded strings
-    pattern = re.compile(
-        codec_regex)
-
-    # Find all matches of Shift JIS encoded strings
     collected_errors = defaultdict(int)
+    # Regular expression to match Shift JIS X 0213 encoded strings
+    pattern = re.compile(codec_regex)
 
-    potentials = pattern.findall(binary_data)
-    logger.info(f'Potential strings: {len(potentials):,}')
-
-    for potential in potentials:
+    matches = pattern.finditer(binary_data)
+    for match in matches:
+        byte_sequence = match.group()[:-1]  # Strip the null byte
         try:
-            # False positives will generate UnicodeDecodeError's
-            extracted_strings.add(potential.decode('shift_jisx0213'))
+            decoded_string = byte_sequence.decode('shift_jisx0213')
+            extracted_strings.add(decoded_string)
+        except UnicodeDecodeError:
+            collected_errors["DecodeError"] += 1
         except Exception as e:
             collected_errors[type(e).__name__] += 1
-            logger.debug(f"Bytes: {potential}")
+            logger.debug(f"Bytes: {match}")
             logger.debug(f"Issue: {e}")
 
     for error in collected_errors.keys():
