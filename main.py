@@ -38,7 +38,7 @@ async def main():
     announce_status('Starting up')
 
     # Extract strings from binary
-    extract = False
+    extract = True
     if not extract:
         announce_status('Skipping extraction')
     else:
